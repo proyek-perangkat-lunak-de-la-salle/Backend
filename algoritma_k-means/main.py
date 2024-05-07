@@ -1,7 +1,8 @@
 import pandas as pd
 from sklearn.cluster import KMeans
-from sklearn.preprocessing import LabelEncoder
+from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import StandardScaler
+import json
 
 # Membaca dataset
 data = pd.read_csv("dataset.csv")
@@ -10,35 +11,43 @@ data = pd.read_csv("dataset.csv")
 data = data.drop(columns=['wilayah_rohani', 'usia', 'jenis_kelamin',
                           'tinggi_badan', 'berat_badan', 'paham_pjk', 'checkup'])
 
+konversi_angka = {
+    "tidak" : 0,
+    "cukup" : 1,
+    "sering": 2,
+    "ya" : 3,
+}
+
 # Mengkodekan data kategorikal
-label_encoder = LabelEncoder()
-data['nyeri_dada'] = label_encoder.fit_transform(data['nyeri_dada'])
-data['mual'] = label_encoder.fit_transform(data['mual'])
-data['sesak_napas'] = label_encoder.fit_transform(data['sesak_napas'])
-data['nyeri_uluhati'] = label_encoder.fit_transform(data['nyeri_uluhati'])
-data['hipertensi'] = label_encoder.fit_transform(data['hipertensi'])
-data['obesitas'] = label_encoder.fit_transform(data['obesitas'])
-data['diabetes'] = label_encoder.fit_transform(data['diabetes'])
-data['genetika'] = label_encoder.fit_transform(data['genetika'])
+for feature in ["nyeri_dada", "mual", "sesak_napas", "nyeri_uluhati", "hipertensi", "obesitas", "diabetes", "genetika"]:
+    data[feature] = data[feature].map(konversi_angka)
+    
+# Mengganti nilai NaN dengan median dari setiap kolom
+imputer = SimpleImputer(strategy='median')
+data_imputed = pd.DataFrame(imputer.fit_transform(data), columns=data.columns)
 
 # Menstandarisasi fitur-fitur numerik
 scaler = StandardScaler()
-data_scaled = scaler.fit_transform(data)
+data_scaled = scaler.fit_transform(data_imputed)
 
 # Melakukan k-means clustering
-kmeans = KMeans(n_clusters=3, random_state=42)
+kmeans = KMeans(n_clusters=3, n_init=10, random_state=42)
 kmeans.fit(data_scaled)
 
 # Memberi nama pada setiap cluster berdasarkan karakteristiknya
 nama_cluster = {
-    0: "Rendah",
-    1: "Sedang",
-    2: "Tinggi"
+    "0": "Rendah",
+    "1": "Sedang",
+    "2": "Tinggi"
 }
 
 # Menambahkan label cluster ke dataset
-data['cluster'] = kmeans.labels_
-data['cluster'] = data['cluster'].map(nama_cluster)
+data_imputed['cluster'] = kmeans.labels_
+data_imputed['cluster'] = data_imputed['cluster'].astype(str).map(nama_cluster)
 
-# Print the resulting DataFrame to the console
-print(data)
+# Check for any remaining NaN values
+assert not data_imputed.isnull().values.any(), "DataFrame still contains NaN values"
+
+# Convert the DataFrame to a JSON string and print it
+json_str = data_imputed.to_json(orient='records')
+print(json_str)

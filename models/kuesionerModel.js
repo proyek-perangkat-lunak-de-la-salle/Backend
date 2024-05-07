@@ -1,6 +1,5 @@
 import { Sequelize } from "sequelize";
 import db from "../config/database.js";
-import user from "./userModel.js";
 
 const { DataTypes } = Sequelize;
 
@@ -33,13 +32,13 @@ const kuesioner = db.define(
     nyeri_dada: {
       type: DataTypes.STRING,
     },
+     mual: {
+      type: DataTypes.STRING,
+    },
     sesak_napas: {
       type: DataTypes.STRING,
     },
-    mual: {
-      type: DataTypes.STRING,
-    },
-    nyeri_ulu_hati: {
+    nyeri_uluhati: {
       type: DataTypes.STRING,
     },
     hipertensi: {
@@ -57,7 +56,5 @@ const kuesioner = db.define(
   },
   { freezeTableName: true }
 );
-
-kuesioner.belongsTo(user, { foreignKey: "id_user" })
 
 export default kuesioner;

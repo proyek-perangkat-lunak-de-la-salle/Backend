@@ -2,6 +2,7 @@ import { Sequelize } from "sequelize";
 import db from "../config/database.js";
 import wilayah from "./wilayahModel.js";
 
+
 const { DataTypes } = Sequelize;
 
 const user = db.define(
@@ -28,14 +29,22 @@ const user = db.define(
       type: DataTypes.STRING,
       unique: true,
     },
+    age: {
+      type: DataTypes.INTEGER,
+    },
     role: {
       type: DataTypes.STRING,
     },
+    risk_level:{
+      type: DataTypes.STRING,
+    
+    }
   },
   { freezeTableName: true }
 );
 
 wilayah.hasMany(user);
 user.belongsTo(wilayah, { foreignKey: "id_wilayah" });
+
 
 export default user;

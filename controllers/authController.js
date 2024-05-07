@@ -29,6 +29,7 @@ export const login = async (req, res) => {
       userId: foundUser.id_user,
       role: foundUser.role,
       username: foundUser.username,
+      id_wilayah: foundUser.id_wilayah,
     };
     console.log(process.env.JWT_SECRET);
     const token = jwt.sign(payload, process.env.JWT_SECRET, {

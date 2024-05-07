@@ -1,5 +1,8 @@
 import kuesioner from "../models/kuesionerModel.js";
-
+import { spawn } from "child_process";
+import history from "../models/historyModel.js";
+import informasiPJK from "../models/informasiPJKModel.js";
+import user from "../models/userModel.js";
 export const getKuesioner = async (req, res) => {
   try {
     const response = await kuesioner.findAll();
@@ -23,6 +26,23 @@ export const getKuesionerById = async (req, res) => {
   }
 };
 
+export const getHistoryByUserId = async (req, res) => {
+  try {
+    const response = await history.findAll({
+      where: { id_user: req.params.id_user },
+      order: [['timestamp', 'DESC']]
+    });
+    if (!response) {
+      return res.status(404).json({ message: "No history found for this user" });
+    }
+    res.status(200).json(response);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+
+
 export const createKuesioner = async (req, res) => {
   const {
     id_user,
@@ -32,9 +52,9 @@ export const createKuesioner = async (req, res) => {
     paham_pjk,
     checkup_rutin,
     nyeri_dada,
-    sesak_napas,
     mual,
-    nyeri_ulu_hati,
+    sesak_napas,
+    nyeri_uluhati,
     hipertensi,
     obesitas,
     diabetes,
@@ -42,7 +62,7 @@ export const createKuesioner = async (req, res) => {
   } = req.body;
 
   try {
-    const response = await kuesioner.create({
+    await kuesioner.create({
       id_user: id_user,
       jenis_kelamin: jenis_kelamin,
       tinggi_badan: tinggi_badan,
@@ -50,17 +70,65 @@ export const createKuesioner = async (req, res) => {
       paham_pjk: paham_pjk,
       checkup_rutin: checkup_rutin,
       nyeri_dada: nyeri_dada,
-      sesak_napas: sesak_napas,
       mual: mual,
-      nyeri_ulu_hati: nyeri_ulu_hati,
+      sesak_napas: sesak_napas,
+      nyeri_uluhati: nyeri_uluhati,
       hipertensi: hipertensi,
       obesitas: obesitas,
       diabetes: diabetes,
       genetika: genetika,
     });
 
-    res.status(201).json({ message: "Kuesioner created"});
+    // Create an object with the required data for clustering
+    const clusteringData = {
+      nyeri_dada: (nyeri_dada),
+      mual: (mual),
+      sesak_napas: (sesak_napas),
+      nyeri_uluhati: (nyeri_uluhati),
+      hipertensi: (hipertensi),
+      obesitas: (obesitas),
+      diabetes: (diabetes),
+      genetika: (genetika),
+    };
+    const clusteringDataJson = JSON.stringify(clusteringData);
+
+    // Run the Python script with the clustering data as an argument
+    const python = spawn('python', ['python_script/clustering.py', clusteringDataJson]);
+    
+    // Collect data from script
+    python.stdout.on('data', async (data) => {
+      console.log('Pipe data from python script ...');
+      const dataStr = data.toString();
+      const dataObj = JSON.parse(dataStr);
+      console.log("Predicted cluster:", dataObj.cluster);
+
+      // Save the predicted cluster to the database
+      await history.create({
+        id_user: id_user,
+        cluster: dataObj.cluster,
+        timestamp: new Date(),
+      });
+
+      const foundUser = await user.findOne({ where: { id_user: id_user } });
+    if (foundUser) {
+      foundUser.risk_level = dataObj.cluster;
+      await foundUser.save();
+    }
+
+      // Get the information for the predicted cluster
+      const informasi = await informasiPJK.findOne({ where: { cluster: dataObj.cluster } });
+
+      // Send a response back to the client with a success message and the predicted cluster
+      res.status(200).json({ message: "Kuesioner created successfully", predictedCluster: dataObj.cluster, informasi: informasi.info });
+    });
+
+     // In case of error
+     python.stderr.on('data', (data) => {
+      console.error(`Error: ${data}`);
+    });
+
   } catch (error) {
+    console.error("Error:", error);
     res.status(500).json({ message: error.message });
   }
 };

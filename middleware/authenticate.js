@@ -12,6 +12,10 @@ const authenticate = (req, res, next) => {
             }
 
             req.user = user;
+            // Access role and wilayah from the user object
+            const { role, id_wilayah } = user;
+            console.log(`User Role: ${role}, User Wilayah: ${id_wilayah}`);
+
             next();
         });
     } else {

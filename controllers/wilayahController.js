@@ -23,6 +23,8 @@ export const getWilayahById = async (req, res) => {
   }
 };
 
+
+
 export const createWilayah = async (req, res) => {
   const { nama_wilayah } = req.body;
   console.log(req.body);
