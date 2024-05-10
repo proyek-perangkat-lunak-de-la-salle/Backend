@@ -61,51 +61,190 @@ export const getUsersByWilayah = async (req, res) => {
   }
 };
 
+export const getAllWilayah = async (req, res) => {
+  const allWilayah = await wilayah.findAll();
+  const wilayahNames = allWilayah.map((wilayah) => wilayah.nama_wilayah);
+  res.json(wilayahNames);
+};
+
 export const getWilayahStats = async (req, res) => {
-  // check if the user is an admin wilayah or admin paroki
-  if (req.user.role !== "Admin Wilayah" && req.user.role !== "Admin Paroki") {
-    return res.status(403).json({ message: "Forbidden"});
+  const wilayahId = req.params.id_wilayah || req.user.id_wilayah;
+
+  const foundWilayah = await wilayah.findOne({
+    where: { id_wilayah: wilayahId },
+  });
+
+  if (!foundWilayah) {
+    return res.status(404).json({ message: "Wilayah not found" });
   }
 
-  // If the user is an admin paroki, fetch all Wilayah
-  if (req.user.role === "Admin Paroki") {
-    const allWilayah = await wilayah.findAll();
+  const users = await user.findAll({
+    where: { id_wilayah: foundWilayah.id_wilayah },
+  });
 
-    const allStats = await Promise.all(allWilayah.map(async (wilayah) => {
-      const users = await user.findAll({ where: { id_wilayah: wilayah.id_wilayah } });
-
-      const clusters = {
-        Rendah: users.filter(user => user.risk_level === 'Rendah').length,
-        Sedang: users.filter(user => user.risk_level === 'Sedang').length,
-        Tinggi: users.filter(user => user.risk_level === 'Tinggi').length,
-      };
-
-      return { wilayah: wilayah.nama_wilayah, clusters };
-    }));
-
-    return res.json(allStats);
-  }
-
-  // If the user is an admin wilayah, fetch the Wilayah managed by the user
-  const managedWilayah = await wilayah.findOne({ where: { id_wilayah: req.user.id_wilayah } });
-
-  if (!managedWilayah) {
-    return res.status(404).json({ message: "Wilayah not found"});
-  }
-
-  // Fetch the users in the managedWilayah
-  const users = await user.findAll({ where: { id_wilayah: managedWilayah.id_wilayah } });
-
-  // Calculate the number of users in each cluster
-  const clusters = {
-    Rendah: users.filter(user => user.risk_level === 'Rendah').length,
-    Sedang: users.filter(user => user.risk_level === 'Sedang').length,
-    Tinggi: users.filter(user => user.risk_level === 'Tinggi').length,
+  const totalUsers = users.length;
+  const riskLevels = {
+    Rendah: users.filter((user) => user.risk_level === "Rendah").length,
+    Sedang: users.filter((user) => user.risk_level === "Sedang").length,
+    Tinggi: users.filter((user) => user.risk_level === "Tinggi").length,
   };
 
-  // Send the statistics back to the client
-  res.json({ wilayah: managedWilayah.nama_wilayah, clusters });
-}
+  // Calculate the percentage of each risk level
+  const percentages = {
+    Rendah: (riskLevels.Rendah / totalUsers) * 100,
+    Sedang: (riskLevels.Sedang / totalUsers) * 100,
+    Tinggi: (riskLevels.Tinggi / totalUsers) * 100,
+  };
+
+  res.json({ wilayah: foundWilayah.nama_wilayah, riskLevels, percentages });
+};
+
+export const getSortedWilayahStats = async (req, res) => {
+  const wilayahId = req.params.id_wilayah || req.user.id_wilayah;
+  const sortKey = req.query.sortKey;
+
+  const foundWilayah = await wilayah.findOne({
+    where: { id_wilayah: wilayahId },
+  });
+
+  if (!foundWilayah) {
+    return res.status(404).json({ message: "Wilayah not found" });
+  }
+
+  const users = await user.findAll({
+    where: { id_wilayah: foundWilayah.id_wilayah },
+    include: [
+      {
+        model: kuesioner,
+        as: "kuesioner",
+      },
+    ],
+  });
+
+  let sortedData;
+  switch (sortKey) {
+    case "umur":
+      sortedData = users.sort((a, b) => a.umur - b.umur);
+      break;
+    case "jenis_kelamin":
+      sortedData = users.sort((a, b) => {
+        if (a.kuesioner && b.kuesioner) {
+          return a.kuesioner.jenis_kelamin.localeCompare(
+            b.kuesioner.jenis_kelamin
+          );
+        } else {
+          return 0;
+        }
+      });
+      break;
+    case "cluster_rendah":
+      sortedData = users.filter((user) => user.risk_level === "Rendah");
+      break;
+    case "cluster_sedang":
+      sortedData = users.filter((user) => user.risk_level === "Sedang");
+      break;
+    case "cluster_tinggi":
+      sortedData = users.filter((user) => user.risk_level === "Tinggi");
+      break;
+    default:
+      sortedData = users;
+  }
+
+  res.json({
+    wilayah: foundWilayah.nama_wilayah,
+    sortedData: sortedData.map((user) => ({
+      id: user.id_user,
+      name: user.nama,
+      umur: user.age,
+      jenis_kelamin: user.kuesioner ? user.kuesioner.jenis_kelamin : null,
+      risk_level: user.risk_level,
+    })),
+  });
+};
+
+export const getClusterStatsByWilayah = async (req, res) => {
+  try {
+    const wilayahId = req.params.id_wilayah || req.user.id_wilayah;
+
+    const foundWilayah = await wilayah.findOne({
+      where: { id_wilayah: wilayahId },
+    });
+
+    if (!foundWilayah) {
+      return res.status(404).json({ message: "Wilayah not found" });
+    }
+
+    const users = await user.findAll({
+      where: { id_wilayah: foundWilayah.id_wilayah },
+      include: [
+        {
+          model: history,
+          as: "histories",
+        },
+      ],
+    });
+
+    const clusterCounts = users.reduce((counts, user) => {
+      if (user.histories && user.histories.length > 0) {
+        // Sort histories by date and pick the latest one
+        const latestHistory = user.histories.sort((a, b) => b.date - a.date)[0];
+        const cluster = latestHistory.cluster;
+        counts[cluster] = (counts[cluster] || 0) + 1;
+      } else {
+        counts["Unknown"] = (counts["Unknown"] || 0) + 1;
+      }
+      return counts;
+    }, {});
+
+    const total = Object.values(clusterCounts).reduce((a, b) => a + b, 0);
+
+    res.json({ wilayah: foundWilayah.nama_wilayah, clusterCounts, total });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const getDetectionResultsByWilayah = async (req, res) => {
+  try {
+    const wilayahId = req.params.id_wilayah;
+
+    const foundWilayah = await wilayah.findOne({
+      where: { id_wilayah: wilayahId },
+    });
+
+    if (!foundWilayah) {
+      return res.status(404).json({ message: "Wilayah not found" });
+    }
+
+    const users = await user.findAll({
+      where: { id_wilayah: foundWilayah.id_wilayah },
+      include: [
+        {
+          model: history,
+          as: "histories",
+        },
+      ],
+    });
+
+    if (!users.length) {
+      return res
+        .status(404)
+        .json({ message: "No users found for this wilayah" });
+    }
+
+    const detectionResults = users.map((user) => {
+      const latestHistory = user.histories.sort((a, b) => b.date - a.date)[0];
+      return {
+        name: user.nama,
+        cluster: latestHistory ? latestHistory.cluster : "Unknown",
+      };
+    });
+
+    res.status(200).json(detectionResults);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
 
 export const createUser = async (req, res) => {
   const { nama, username, password, confirmPassword, email, role, age } =
@@ -124,12 +263,10 @@ export const createUser = async (req, res) => {
         .json({ message: "A user with this email already exists" });
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
-
     const response = await user.create({
       nama: nama,
       username: username,
-      password: hashedPassword,
+      password: password, 
       email: email,
       age: age,
       role: role,
